@@ -395,6 +395,8 @@ describe('reactivity/effect', () => {
   })
 
   it('should avoid infinite loops with other effects', () => {
+    // 如果不加 effectStack，会导致 num2 改变，触发了 spy1, 
+    // spy1 里面 num1 改变又触发了 spy2, spy2 又会改变 num2，从而触发了死循环。
     const nums = reactive({ num1: 0, num2: 1 })
 
     const spy1 = jest.fn(() => (nums.num1 = nums.num2))

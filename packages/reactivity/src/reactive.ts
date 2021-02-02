@@ -1,3 +1,7 @@
+//+ mutableHandlers,可变数据代理处理
+//+ readonlyHandlers,只读(不可变)数据代理处理
+//+ collections 指 Set, Map, WeakMap, WeakSet
+
 import { isObject, toRawType, def } from '@vue/shared'
 import {
   mutableHandlers,
@@ -14,9 +18,13 @@ import { UnwrapRef, Ref } from './ref'
 
 export const enum ReactiveFlags {
   SKIP = '__v_skip',
+  //+ 跳过reactive
   IS_REACTIVE = '__v_isReactive',
+  //+ 是否是reactive对象
   IS_READONLY = '__v_isReadonly',
+  //+ 是否是只读
   RAW = '__v_raw'
+  //+ 源对象
 }
 
 export interface Target {
@@ -50,7 +58,9 @@ function targetTypeMap(rawType: string) {
   }
 }
 
+// + 拿到传进来的target是什么类型
 function getTargetType(value: Target) {
+  //+ 如果传进来的target跳过reactive或者说该对象不能被扩展就返回无效
   return value[ReactiveFlags.SKIP] || !Object.isExtensible(value)
     ? TargetType.INVALID
     : targetTypeMap(toRawType(value))
@@ -163,6 +173,7 @@ export function shallowReadonly<T extends object>(
   )
 }
 
+// + 创建并维护两个weekmap
 function createReactiveObject(
   target: Target,
   isReadonly: boolean,
@@ -218,6 +229,7 @@ export function isProxy(value: unknown): boolean {
 }
 
 export function toRaw<T>(observed: T): T {
+  // + 解嵌套proxy
   return (
     (observed && toRaw((observed as Target)[ReactiveFlags.RAW])) || observed
   )
