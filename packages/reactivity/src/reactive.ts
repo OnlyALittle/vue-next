@@ -236,6 +236,7 @@ export function toRaw<T>(observed: T): T {
 }
 
 export function markRaw<T extends object>(value: T): T {
+  //+ 给对象添加一个跳过的标记
   def(value, ReactiveFlags.SKIP, true)
   return value
 }
