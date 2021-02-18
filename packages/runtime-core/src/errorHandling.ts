@@ -58,6 +58,7 @@ export const ErrorTypeStrings: Record<number | string, string> = {
 
 export type ErrorTypes = LifecycleHooks | ErrorCodes
 
+//+ Executes the function and catches exceptions
 export function callWithErrorHandling(
   fn: Function,
   instance: ComponentInternalInstance | null,

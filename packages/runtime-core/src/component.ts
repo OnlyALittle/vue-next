@@ -788,6 +788,7 @@ export function createSetupContext(
 
 // record effects created during a component's setup() so that they can be
 // stopped when the component unmounts
+//+ 记录组件setup时的副作用操作，方便在unmouted的时候卸载
 export function recordInstanceBoundEffect(
   effect: ReactiveEffect,
   instance = currentInstance

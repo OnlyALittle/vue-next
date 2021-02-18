@@ -167,6 +167,7 @@ function doWatch(
 
   let getter: () => any
   let forceTrigger = false
+  //+ 针对不同resource做出不同的getter处理
   if (isRef(source)) {
     getter = () => (source as Ref).value
     forceTrigger = !!(source as Ref)._shallow

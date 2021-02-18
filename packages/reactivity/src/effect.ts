@@ -33,7 +33,7 @@ export interface ReactiveEffectOptions {
   onStop?: () => void
   //+ 停止监听时触发
   allowRecurse?: boolean
-  //+ 允许递归
+  //+ 允许自执行
 }
 
 export type DebuggerEvent = {
@@ -68,7 +68,7 @@ export function effect<T = any>(
   if (isEffect(fn)) {
     fn = fn.raw
   }
-  //+ 调用 createReactiveEffect 创建 新的effect 
+  //+ 调用 createReactiveEffect 创建 新的effect
   const effect = createReactiveEffect(fn, options)
   //+ 是不是立即执行
   if (!options.lazy) {
@@ -102,12 +102,12 @@ function createReactiveEffect<T = any>(
     //+ 如果在，则不进行调用，这个主要是为了避免死循环
     //+ 可以看下测试用例 should avoid infinite loops with other effects
     if (!effectStack.includes(effect)) {
-      //+ 清除依赖, 每次 effect 运行都会重新收集依赖, 
+      //+ 清除依赖, 每次 effect 运行都会重新收集依赖,
       cleanup(effect)
       //+ 开始重新收集依赖
       try {
         enableTracking()
-        //+ 允许追踪当前effect  
+        //+ 允许追踪当前effect
         effectStack.push(effect)
         //+  effect 放入 effectStack
         activeEffect = effect
@@ -116,7 +116,7 @@ function createReactiveEffect<T = any>(
         // 执行完毕
         effectStack.pop()
         //+ 激活effect返回之前的状态
-        //+ 恢复上一次effect信息，即本次允许追踪信息出栈 
+        //+ 恢复上一次effect信息，即本次允许追踪信息出栈
         resetTracking()
         activeEffect = effectStack[effectStack.length - 1]
       }
@@ -136,7 +136,6 @@ function createReactiveEffect<T = any>(
   //+ 入参
   return effect
 }
-
 
 // 清除副作用的依赖
 function cleanup(effect: ReactiveEffect) {
