@@ -57,18 +57,23 @@ class RefImpl<T> {
   public readonly __v_isRef = true
 
   constructor(private _rawValue: T, public readonly _shallow = false) {
+    //+ 把对象直接处理成reactive
+    //+ _shallow模式下，传入的一定是vue，但是refImpl只会监听对象的value，所以其他值不会响应式
     this._value = _shallow ? _rawValue : convert(_rawValue)
   }
 
   get value() {
+    //+ 包上一层收集依赖，监听value 这个key，因为ref只能通过value访问
     track(toRaw(this), TrackOpTypes.GET, 'value')
     return this._value
   }
 
   set value(newVal) {
+    //+ 比较源值
     if (hasChanged(toRaw(newVal), this._rawValue)) {
       this._rawValue = newVal
       this._value = this._shallow ? newVal : convert(newVal)
+      //+ 触发收集了的依赖
       trigger(toRaw(this), TriggerOpTypes.SET, 'value', newVal)
     }
   }
@@ -124,6 +129,7 @@ class CustomRefImpl<T> {
 
   public readonly __v_isRef = true
 
+  //+ 提供依赖收集和触发的方法，逻辑由函数自己控制
   constructor(factory: CustomRefFactory<T>) {
     const { get, set } = factory(
       () => track(this, TrackOpTypes.GET, 'value'),
@@ -142,6 +148,25 @@ class CustomRefImpl<T> {
   }
 }
 
+// function useDebouncedRef(value, delay = 200) {
+//   let timeout
+//   return customRef((track, trigger) => {
+//     return {
+//       get() {
+//         track()
+//         return value
+//       },
+//       set(newValue) {
+//         clearTimeout(timeout)
+//         timeout = setTimeout(() => {
+//           value = newValue
+//           trigger()
+//         }, delay)
+//       }
+//     }
+//   })
+// }
+
 export function customRef<T>(factory: CustomRefFactory<T>): Ref<T> {
   return new CustomRefImpl(factory) as any
 }
@@ -150,6 +175,7 @@ export function toRefs<T extends object>(object: T): ToRefs<T> {
   if (__DEV__ && !isProxy(object)) {
     console.warn(`toRefs() expects a reactive object but received a plain one.`)
   }
+  //+ 递归解响应式
   const ret: any = isArray(object) ? new Array(object.length) : {}
   for (const key in object) {
     ret[key] = toRef(object, key)

@@ -95,7 +95,7 @@ function createReactiveEffect<T = any>(
 ): ReactiveEffect<T> {
   const effect = function reactiveEffect(): unknown {
     if (!effect.active) {
-      // 在没有激活的情况下返回自定义调度函数或者说是原函数的结果
+      //+ 在没有激活的情况下返回自定义调度函数或者说是原函数的结果
       return options.scheduler ? undefined : fn()
     }
     //+ 首先判断是否当前 effect 是否在 effectStack 当中，
@@ -185,11 +185,11 @@ export function track(target: object, type: TrackOpTypes, key: unknown) {
     //+ init
     depsMap.set(key, (dep = new Set()))
   }
-  //  key 的 依赖 Set 集合 不包括当前激活副作用
+  //+  key 的 依赖 Set 集合 不包括当前激活副作用
   if (!dep.has(activeEffect)) {
     //+ 依赖收集副作用
     dep.add(activeEffect)
-    //+  副作用中保存当前依赖Set
+    //+ 副作用中保存当前依赖Set
     activeEffect.deps.push(dep)
     // 开发环境触发收集的hooks
     if (__DEV__ && activeEffect.options.onTrack) {
@@ -236,7 +236,7 @@ export function trigger(
     // trigger all effects for target
     depsMap.forEach(add)
   } else if (key === 'length' && isArray(target)) {
-    //+ 数组长度变更
+    //+ 数组长度变更，触发length的track或者索引在后的
     depsMap.forEach((dep, key) => {
       if (key === 'length' || key >= (newValue as number)) {
         add(dep)

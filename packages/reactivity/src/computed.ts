@@ -34,6 +34,10 @@ class ComputedRefImpl<T> {
     private readonly _setter: ComputedSetter<T>,
     isReadonly: boolean
   ) {
+    //+ getter内部收集的track发生变化时触发computed的trigger，
+    //+ 这就意味着此时收集了computedRef的副作用的函数会重新执行
+    //+ 而在这个副作用函数中一定会对computedRef产生get访问，
+    //+ 此时又回到get函数内部发现drity为需要求值，就执行runner进行真实的求值。
     this.effect = effect(getter, {
       lazy: true,
       scheduler: () => {
@@ -49,6 +53,7 @@ class ComputedRefImpl<T> {
 
   get value() {
     if (this._dirty) {
+      // 开启内部的依赖收集
       this._value = this.effect()
       this._dirty = false
     }

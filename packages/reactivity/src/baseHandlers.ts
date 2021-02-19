@@ -82,7 +82,8 @@ function createGetter(isReadonly = false, shallow = false) {
     // target 目标对象。 key 被获取的属性名。 receiver 实例化的Proxy自身
     //+  key 是 ReactiveFlags的情况
     if (key === ReactiveFlags.IS_REACTIVE) {
-      // 如果这个key是IS_REACTIVE，表示这个key是用来判断是否是reactive的，不做特殊处理，直接返回结果
+      //+ 被proxy包裹起来的只要不是创建的只读类型，就算reactive
+      //+ 如果这个key是IS_REACTIVE，表示这个key是用来判断是否是reactive的，不做特殊处理，直接返回结果
       return !isReadonly
     } else if (key === ReactiveFlags.IS_READONLY) {
       return isReadonly
@@ -90,6 +91,7 @@ function createGetter(isReadonly = false, shallow = false) {
       key === ReactiveFlags.RAW &&
       receiver === (isReadonly ? readonlyMap : reactiveMap).get(target)
     ) {
+      //+ 读取reactive的源值，如果已经创建了则返回
       return target
     }
 
@@ -156,6 +158,7 @@ function createSetter(shallow = false) {
     const oldValue = (target as any)[key]
     if (!shallow) {
       //+ 深度代理情况下，我们需要手动处理属性值为ref的情况，将trigger交给ref来触发
+      //+ 赋值给ref的value
       value = toRaw(value)
       if (!isArray(target) && isRef(oldValue) && !isRef(value)) {
         oldValue.value = value
@@ -186,6 +189,7 @@ function createSetter(shallow = false) {
   }
 }
 
+// 删除key
 function deleteProperty(target: object, key: string | symbol): boolean {
   const hadKey = hasOwn(target, key)
   const oldValue = (target as any)[key]

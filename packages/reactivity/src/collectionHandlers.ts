@@ -88,6 +88,7 @@ function set(this: MapTypes, key: unknown, value: unknown) {
   const target = toRaw(this)
   const { has, get } = getProto(target)
 
+  //+ 是否已经存在该值
   let hadKey = has.call(target, key)
   if (!hadKey) {
     key = toRaw(key)
@@ -298,6 +299,8 @@ iteratorMethods.forEach(method => {
   )
 })
 
+//+ collection 类型的只监听get就好了
+//+ 因为Set, Map, WeakMap, WeakSet这几个类型正常操作都是通过它内置的api来实现的
 function createInstrumentationGetter(isReadonly: boolean, shallow: boolean) {
   const instrumentations = shallow
     ? shallowInstrumentations
@@ -310,6 +313,7 @@ function createInstrumentationGetter(isReadonly: boolean, shallow: boolean) {
     key: string | symbol,
     receiver: CollectionTypes
   ) => {
+    //+ 与base相同 的逻辑
     if (key === ReactiveFlags.IS_REACTIVE) {
       return !isReadonly
     } else if (key === ReactiveFlags.IS_READONLY) {
