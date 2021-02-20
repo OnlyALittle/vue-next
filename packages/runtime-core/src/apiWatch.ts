@@ -54,12 +54,15 @@ type MapSources<T, Immediate> = {
 
 type InvalidateCbRegistrator = (cb: () => void) => void
 
+//+ watchEffect 配置选项
 export interface WatchOptionsBase {
+  //+ 调度模式
   flush?: 'pre' | 'post' | 'sync'
   onTrack?: ReactiveEffectOptions['onTrack']
   onTrigger?: ReactiveEffectOptions['onTrigger']
 }
 
+//+ watch 配置选项
 export interface WatchOptions<Immediate = boolean> extends WatchOptionsBase {
   immediate?: Immediate
   deep?: boolean
@@ -165,11 +168,13 @@ function doWatch(
     )
   }
 
+  //+ 1. 处理getter ref reactive-obj func
   let getter: () => any
   let forceTrigger = false
   //+ 针对不同resource做出不同的getter处理
   if (isRef(source)) {
     getter = () => (source as Ref).value
+    //+ shallowRef,自定义的ref
     forceTrigger = !!(source as Ref)._shallow
   } else if (isReactive(source)) {
     getter = () => source
@@ -198,6 +203,7 @@ function doWatch(
         if (instance && instance.isUnmounted) {
           return
         }
+        // onInvalidate中定义
         if (cleanup) {
           cleanup()
         }
@@ -214,18 +220,22 @@ function doWatch(
     __DEV__ && warnInvalidSource(source)
   }
 
+  //+ 深度遍历traverse整体reactive-obj
   if (cb && deep) {
     const baseGetter = getter
     getter = () => traverse(baseGetter())
   }
 
+  //+ 2. 用来存储清除函数
   let cleanup: () => void
+  //+ watch函数中注册清除函数副作用行为的hook
   const onInvalidate: InvalidateCbRegistrator = (fn: () => void) => {
     cleanup = runner.options.onStop = () => {
       callWithErrorHandling(fn, instance, ErrorCodes.WATCH_CLEANUP)
     }
   }
 
+  //+ 在SSR中不需要设置实际的效果，除非它是迫切的，否则应该是noop
   // in SSR there is no need to setup an actual effect, and it should be noop
   // unless it's eager
   if (__NODE_JS__ && isInSSRComponentSetup) {
@@ -241,19 +251,25 @@ function doWatch(
     return NOOP
   }
 
+  //+ 3. 生成执行cb的函数
   let oldValue = isArray(source) ? [] : INITIAL_WATCHER_VALUE
+  //+ track到的getter中发生了trriger时触发effect的 Scheduler，然后再来调用runner
   const job: SchedulerJob = () => {
     if (!runner.active) {
       return
     }
     if (cb) {
+      //+ 求新值
       // watch(source, cb)
       const newValue = runner()
+      //+ 深度监听直接执行cb
       if (deep || forceTrigger || hasChanged(newValue, oldValue)) {
+        //+ 清除副作用
         // cleanup before running cb again
         if (cleanup) {
           cleanup()
         }
+        //+ 执行
         callWithAsyncErrorHandling(cb, instance, ErrorCodes.WATCH_CALLBACK, [
           newValue,
           // pass undefined as the old value when it's changed for the first time
@@ -276,6 +292,7 @@ function doWatch(
   if (flush === 'sync') {
     scheduler = job
   } else if (flush === 'post') {
+    //+ 更新后执行
     scheduler = () => queuePostRenderEffect(job, instance && instance.suspense)
   } else {
     // default: 'pre'
@@ -283,6 +300,7 @@ function doWatch(
       if (!instance || instance.isMounted) {
         queuePreFlushCb(job)
       } else {
+        //+ pre 使用必须在组件挂载完成的情况下，否则直接同步执行
         // with 'pre' option, the first call must happen before
         // the component is mounted so it is called synchronously.
         job()
@@ -290,6 +308,7 @@ function doWatch(
     }
   }
 
+  //+ 创建副作用函数
   const runner = effect(getter, {
     lazy: true,
     onTrack,
@@ -297,13 +316,16 @@ function doWatch(
     scheduler
   })
 
+  //+ 将watch创建的effect关联到组件实例上，方便组件卸载时停止
   recordInstanceBoundEffect(runner, instance)
 
+  //+ 初始化执行
   // initial run
   if (cb) {
     if (immediate) {
       job()
     } else {
+      //+ 求一次值
       oldValue = runner()
     }
   } else if (flush === 'post') {
@@ -312,6 +334,7 @@ function doWatch(
     runner()
   }
 
+  //+ 返回 stop
   return () => {
     stop(runner)
     if (instance) {
@@ -334,6 +357,7 @@ export function instanceWatch(
   return doWatch(getter, cb.bind(publicThis), options, this)
 }
 
+//+ 只是把reactive-obj内部全部访问一遍收集track
 function traverse(value: unknown, seen: Set<unknown> = new Set()) {
   if (!isObject(value) || seen.has(value)) {
     return value

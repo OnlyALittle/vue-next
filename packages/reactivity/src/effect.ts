@@ -189,7 +189,8 @@ export function track(target: object, type: TrackOpTypes, key: unknown) {
   if (!dep.has(activeEffect)) {
     //+ 依赖收集副作用
     dep.add(activeEffect)
-    //+ 副作用中保存当前依赖Set
+    //+ 副作用中保存当前依赖Set（dep存储的是这个target下所有的effect）
+    //+ 方便effect clean的时候快速删除
     activeEffect.deps.push(dep)
     // 开发环境触发收集的hooks
     if (__DEV__ && activeEffect.options.onTrack) {
@@ -221,7 +222,7 @@ export function trigger(
   const add = (effectsToAdd: Set<ReactiveEffect> | undefined) => {
     if (effectsToAdd) {
       effectsToAdd.forEach(effect => {
-        //+ 副作用没有激活或者允许递归，所有副作用都添加
+        //+ 不是当前激活的副作用或者允许自执行的才被加入到集合中
         if (effect !== activeEffect || effect.allowRecurse) {
           effects.add(effect)
         }

@@ -7,6 +7,7 @@ export interface InjectionKey<T> extends Symbol {}
 
 export function provide<T>(key: InjectionKey<T> | string | number, value: T) {
   if (!currentInstance) {
+    //+ 不在setup中调用直接警告
     if (__DEV__) {
       warn(`provide() can only be used inside setup().`)
     }
@@ -17,6 +18,9 @@ export function provide<T>(key: InjectionKey<T> | string | number, value: T) {
     // own provides object using parent provides object as prototype.
     // this way in `inject` we can simply look up injections from direct
     // parent and let the prototype chain do the work.
+    //+ 默认情况下，一个实例会继承它的父提供对象
+    //+ 但当它需要提供自己的值时，它会使用父提供对象作为原型创建自己的提供对象。
+    //+ 在‘inject’中，我们可以简单地从直接父级查找注入，然后让原型链来做这个工作。
     const parentProvides =
       currentInstance.parent && currentInstance.parent.provides
     if (parentProvides === provides) {
@@ -54,7 +58,7 @@ export function inject(
       instance.parent == null
         ? instance.vnode.appContext && instance.vnode.appContext.provides
         : instance.parent.provides
-
+    //+ 原型链逐渐向上
     if (provides && (key as string | symbol) in provides) {
       // TS doesn't allow symbol as index type
       return provides[key as string]

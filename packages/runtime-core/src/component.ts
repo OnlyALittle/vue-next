@@ -427,6 +427,7 @@ export function createComponentInstance(
     exposed: null,
     withProxy: null,
     effects: null,
+    //+ provides继承父组件
     provides: parent ? parent.provides : Object.create(appContext.provides),
     accessCache: null!,
     renderCache: [],
