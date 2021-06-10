@@ -30,6 +30,7 @@ let renderer: Renderer<Element> | HydrationRenderer
 let enabledHydration = false
 
 function ensureRenderer() {
+  // 得到渲染器
   return renderer || (renderer = createRenderer<Node, Element>(rendererOptions))
 }
 
@@ -51,6 +52,7 @@ export const hydrate = ((...args) => {
 }) as RootHydrateFunction
 
 export const createApp = ((...args) => {
+  //+ 创建渲染器并调用渲染器的createApp方法创建app实例
   const app = ensureRenderer().createApp(...args)
 
   if (__DEV__) {
@@ -58,15 +60,22 @@ export const createApp = ((...args) => {
   }
 
   const { mount } = app
+  //+ 重写app的mount方法
+
   app.mount = (containerOrSelector: Element | ShadowRoot | string): any => {
+    //+ 标准化容器 element | string --> element
     const container = normalizeContainer(containerOrSelector)
     if (!container) return
+    //+ 拿到App组件
     const component = app._component
+    //+ 如果既不是函数组件也没有render和模板则容器元素的innerHtml当作模板
     if (!isFunction(component) && !component.render && !component.template) {
       component.template = container.innerHTML
     }
+    //+ 挂载前清空容器
     // clear content before mounting
     container.innerHTML = ''
+    //+ 执行挂载
     const proxy = mount(container)
     if (container instanceof Element) {
       container.removeAttribute('v-cloak')

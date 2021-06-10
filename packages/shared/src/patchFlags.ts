@@ -35,6 +35,9 @@ export const enum PatchFlags {
    *   const style = { color: 'red' }
    *   render() { return e('div', { style }) }
    */
+  //+ 动态绑定style，需要注意一点，如果绑定的是静态object，即object不会动态变化
+  //+ 将同样被当作静态属性来处理，静态属性声明会被提升到render函数体的最前端
+  //+ 减少不必要的属性创建开销
   STYLE = 1 << 2,
 
   /**
@@ -44,6 +47,9 @@ export const enum PatchFlags {
    * array that contains the keys of the props that may change so the runtime
    * can diff them faster (without having to worry about removed props)
    */
+  //+ dom元素包含除class、style之外的动态属性，或者组件包含动态属性（可以是class、style）
+  //+ 动态属性在编译阶段被收集到dynamicProps中，运行时做diff操作时会只对比动态属性的变化
+  //+ 省略对其他无关属性的diff（删除的属性无需关心）
   PROPS = 1 << 3,
 
   /**
@@ -51,9 +57,12 @@ export const enum PatchFlags {
    * diff is always needed to remove the old key. This flag is mutually
    * exclusive with CLASS, STYLE and PROPS.
    */
+  //+ 包含动态变化的keys，需要对属性做全量diff，该标志位和
+  //+ CLASS、STYLE、PROPS是互斥的，不会同时存在，有FULL_PROPS上面提到的三个标志位会失效
   FULL_PROPS = 1 << 4,
 
   /**
+   * ssr 相关
    * Indicates an element with event listeners (which need to be attached
    * during hydration)
    */
@@ -62,6 +71,9 @@ export const enum PatchFlags {
   /**
    * Indicates a fragment whose children order doesn't change.
    */
+
+  //+ 稳定的fragment类型，其children不会变化，元素次序固定，
+  //+ 如`<div v-for="item in 10">{{ item }}</div>`生成的fragment
   STABLE_FRAGMENT = 1 << 6,
 
   /**
@@ -80,6 +92,8 @@ export const enum PatchFlags {
    * and onVnodeXXX hooks, it simply marks the vnode so that a parent block
    * will track it.
    */
+  //+ 不需要做props的patch，比如节点包含ref或者指令 ( onVnodeXXX hooks ) ，
+  //+ 但是节点会被当作动态节点收集到对应block的dynamicChildren中
   NEED_PATCH = 1 << 9,
 
   /**
@@ -108,6 +122,8 @@ export const enum PatchFlags {
    * Indicates a hoisted static vnode. This is a hint for hydration to skip
    * the entire sub tree since static content never needs to be updated.
    */
+  //+ 静态节点，由于被提升到render函数体最顶部，因此节点一旦声明就会维持在内存里
+  //+ re-render时就不需要再重复创建节点了，同时diff时会跳过静态节点，因为内容不发生任何变化
   HOISTED = -1,
   /**
    * A special flag that indicates that the diffing algorithm should bail out
@@ -116,6 +132,8 @@ export const enum PatchFlags {
    * render functions, which should always be fully diffed)
    * OR manually cloneVNodes
    */
+  //+ 一个特殊的标志，表明diff算法应该退出优化模式。
+  //+ 例如，renderSlot()在遇到非编译器生成的槽(例如，手动编写的渲染函数，应该总是完全不同的)或手动创建的cloneVNodes时创建的块片段
   BAIL = -2
 }
 

@@ -16,6 +16,7 @@ export function patchStyle(el: Element, prev: Style, next: Style) {
       setStyle(style, key, next[key])
     }
     if (prev && !isString(prev)) {
+      //+ 清除没有了的style
       for (const key in prev) {
         if (next[key] == null) {
           setStyle(style, key, '')

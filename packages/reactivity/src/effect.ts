@@ -63,6 +63,7 @@ export function isEffect(fn: any): fn is ReactiveEffect {
 export function effect<T = any>(
   fn: () => T,
   options: ReactiveEffectOptions = EMPTY_OBJ
+  //+ 默认为空 更新组件的effect会用到
 ): ReactiveEffect<T> {
   //+ 判断传入的fn是不是effect，如果是的话取出原始值
   if (isEffect(fn)) {
@@ -143,6 +144,8 @@ function cleanup(effect: ReactiveEffect) {
   //+ deps 是持有 effect 的依赖数组
   if (deps.length) {
     for (let i = 0; i < deps.length; i++) {
+      //+ 此时清除的是什么
+      //+ delete的是这次track会触发那些effect，把这个在执行的effect从这次track中去除，避免重复触发
       deps[i].delete(effect)
     }
     deps.length = 0
@@ -167,6 +170,12 @@ export function resetTracking() {
   shouldTrack = last === undefined ? true : last
 }
 
+// 询问targetMap有没有该target（引用属性），没有则设置target为键，value为空的Map，depsMap。
+// 查看value存在不存在key，不存在则创建一个空的Set，dep。
+// 查看dep存在不存在effect，不存在则存放当前activeEffect，給当前activeEffect.deps.push(dep)。
+// 一个全局收集器收集target，key，activeEffect，由于追踪响应行为的是key，所以在key的层级存放activeEffect。
+// 如果用对象来描述Map 用数组描述Set，那么以下就是当前测试变量a得出的结果
+// { target: { key: [ activeEffect ] } }
 export function track(target: object, type: TrackOpTypes, key: unknown) {
   //+ 依赖收集进行的前置条件：
   // 1. 全局收集标识开启
@@ -175,6 +184,7 @@ export function track(target: object, type: TrackOpTypes, key: unknown) {
     return
   }
   //+ 创建依赖收集map target ---> deps ---> effect
+  //+ key 对应的effect
   let depsMap = targetMap.get(target)
   if (!depsMap) {
     //+ init
@@ -192,6 +202,7 @@ export function track(target: object, type: TrackOpTypes, key: unknown) {
     //+ 副作用中保存当前依赖Set（dep存储的是这个target下所有的effect）
     //+ 方便effect clean的时候快速删除
     activeEffect.deps.push(dep)
+    // Set<ReactiveEffect>
     // 开发环境触发收集的hooks
     if (__DEV__ && activeEffect.options.onTrack) {
       activeEffect.options.onTrack({
@@ -213,6 +224,7 @@ export function trigger(
   oldTarget?: Map<unknown, unknown> | Set<unknown>
 ) {
   const depsMap = targetMap.get(target)
+  // Map<any, Set<ReactiveEffect>>
   if (!depsMap) {
     // never been tracked
     return
@@ -233,10 +245,13 @@ export function trigger(
   //+ 收集各种触发条件下的副作用
   if (type === TriggerOpTypes.CLEAR) {
     //+ Map或Set被清空时需要调用整个target对应的所有effect
+    //+ 测试用例在reactivity/__test__/collections/Map.sepc.ts
+    //+ 全局搜索 'should observe size mutations'
     // collection being cleared
     // trigger all effects for target
     depsMap.forEach(add)
   } else if (key === 'length' && isArray(target)) {
+    //+ taregt是数组的情况下 我们修改其length长度，是一种修改操作
     //+ 数组长度变更，触发length的track或者索引在后的
     depsMap.forEach((dep, key) => {
       if (key === 'length' || key >= (newValue as number)) {
@@ -297,6 +312,9 @@ export function trigger(
       })
     }
     if (effect.options.scheduler) {
+      //+ 渲染processComponent的时候在setupRenderEffect方法中，
+      //+ instance.update = effect(()=>{}, prodEffectOptions)
+      //+ 最终相当于是queueJob(effect)
       effect.options.scheduler(effect)
     } else {
       effect()

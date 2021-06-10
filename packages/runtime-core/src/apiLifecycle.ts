@@ -30,9 +30,12 @@ export function injectHook(
         if (target.isUnmounted) {
           return
         }
+        //+ 禁用所有生命周期钩子内的跟踪，因为它们可能被称为内部效果。
         // disable tracking inside all lifecycle hooks
         // since they can potentially be called inside effects.
         pauseTracking()
+        //+ 在钩子调用期间设置currentInstance。
+        //+ 这假设钩子不会同步触发其他钩子，只有当用户做了一些非常糟糕的事情时，其他钩子才会被设为false。
         // Set currentInstance during hook invocation.
         // This assumes the hook does not synchronously trigger other hooks, which
         // can only be false when the user does something really funky.

@@ -73,6 +73,9 @@ export function renderComponentRoot(
       // withProxy is a proxy with a different `has` trap only for
       // runtime-compiled render functions using `with` block.
       const proxyToUse = withProxy || proxy
+      // 获取渲染代理
+      // 执行render函数
+      console.log('----执行render----')
       result = normalizeVNode(
         render!.call(
           proxyToUse,
@@ -92,6 +95,7 @@ export function renderComponentRoot(
       if (__DEV__ && attrs === props) {
         markAttrsAccessed()
       }
+      // 函数式组件，直接执行组件函数
       result = normalizeVNode(
         render.length > 1
           ? render(
@@ -109,6 +113,7 @@ export function renderComponentRoot(
             )
           : render(props, null as any /* we know it doesn't need it */)
       )
+      // 得到其余参数
       fallthroughAttrs = Component.props
         ? attrs
         : getFunctionalFallthrough(attrs)
@@ -117,14 +122,17 @@ export function renderComponentRoot(
     // attr merging
     // in dev mode, comments are preserved, and it's possible for a template
     // to have comments along side the root element which makes it a fragment
+    //+ 先默认自身return的vnode为root组件
     let root = result
     let setRoot: ((root: VNode) => void) | undefined = undefined
     if (__DEV__ && result.patchFlag & PatchFlags.DEV_ROOT_FRAGMENT) {
       ;[root, setRoot] = getChildRoot(result)
     }
 
+    //+ Component.inheritAttrs 默认为undefiend
     if (Component.inheritAttrs !== false && fallthroughAttrs) {
       const keys = Object.keys(fallthroughAttrs)
+      console.log(`----处理attrs，${keys}----`)
       const { shapeFlag } = root
       if (keys.length) {
         if (
@@ -132,15 +140,22 @@ export function renderComponentRoot(
           shapeFlag & ShapeFlags.COMPONENT
         ) {
           if (propsOptions && keys.some(isModelListener)) {
+            console.log('----vmodel----')
             // If a v-model listener (onUpdate:xxx) has a corresponding declared
             // prop, it indicates this component expects to handle v-model and
             // it should not fallthrough.
             // related: #1543, #1643, #1989
+            console.log('----清除 fallthroughAttrs 中的model----')
             fallthroughAttrs = filterModelListeners(
               fallthroughAttrs,
               propsOptions
             )
           }
+          //+ 通过cloneVNode内部调用mergeProps把subTree.props与subTree.attrs合并，
+          //+ attrs：initProps中，根据当前组件vnode.props所遍历得到的，本质上是vnode.props。
+          console.log(
+            '----通过cloneVNode内部调用mergeProps把subTree.props与subTree.attrs合并，----'
+          )
           root = cloneVNode(root, fallthroughAttrs)
         } else if (__DEV__ && !accessedAttrs && root.type !== Comment) {
           const allAttrs = Object.keys(attrs)
@@ -211,7 +226,9 @@ export function renderComponentRoot(
     handleError(err, instance, ErrorCodes.RENDER_FUNCTION)
     result = createVNode(Comment)
   }
+  //+ 整个render完成
   currentRenderingInstance = null
+  console.log('----renderComponentRoot end----')
 
   return result
 }
@@ -314,23 +331,28 @@ export function shouldUpdateComponent(
   }
 
   // force child update for runtime directive or transition on component vnode.
+  //+ 存在指令或者说transition的强制更新
   if (nextVNode.dirs || nextVNode.transition) {
     return true
   }
 
   if (optimized && patchFlag >= 0) {
+    //+ 动态插槽直接更新
     if (patchFlag & PatchFlags.DYNAMIC_SLOTS) {
       // slot content that references values that might have changed,
       // e.g. in a v-for
       return true
     }
+    //+ FULL_PROPS代表不区分style、class、props的情况
     if (patchFlag & PatchFlags.FULL_PROPS) {
+      //+ 比较有没有区别
       if (!prevProps) {
         return !!nextProps
       }
       // presence of this flag indicates props are always non-null
       return hasPropsChanged(prevProps, nextProps!, emits)
     } else if (patchFlag & PatchFlags.PROPS) {
+      //+ 模板编译阶段优化 动态props，排除emit
       const dynamicProps = nextVNode.dynamicProps!
       for (let i = 0; i < dynamicProps.length; i++) {
         const key = dynamicProps[i]

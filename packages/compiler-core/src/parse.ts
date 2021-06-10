@@ -124,6 +124,7 @@ function parseChildren(
   const ns = parent ? parent.ns : Namespaces.HTML
   const nodes: TemplateChildNode[] = []
 
+  //+ 判断这一个tag是否处理完毕
   while (!isEnd(context, mode, ancestors)) {
     __TEST__ && assert(context.source.length > 0)
     const s = context.source
@@ -132,6 +133,7 @@ function parseChildren(
     if (mode === TextModes.DATA || mode === TextModes.RCDATA) {
       if (!context.inVPre && startsWith(s, context.options.delimiters[0])) {
         // '{{'
+        //+ 不在v-pre内，且{{开头。处理'{{'，插值解析
         node = parseInterpolation(context, mode)
       } else if (mode === TextModes.DATA && s[0] === '<') {
         // https://html.spec.whatwg.org/multipage/parsing.html#tag-open-state
@@ -140,6 +142,7 @@ function parseChildren(
         } else if (s[1] === '!') {
           // https://html.spec.whatwg.org/multipage/parsing.html#markup-declaration-open-state
           if (startsWith(s, '<!--')) {
+            //+ 解析注释节点
             node = parseComment(context)
           } else if (startsWith(s, '<!DOCTYPE')) {
             // Ignore DOCTYPE by a limitation.
@@ -158,12 +161,15 @@ function parseChildren(
         } else if (s[1] === '/') {
           // https://html.spec.whatwg.org/multipage/parsing.html#end-tag-open-state
           if (s.length === 2) {
+            //+ 没找到tag
             emitError(context, ErrorCodes.EOF_BEFORE_TAG_NAME, 2)
           } else if (s[2] === '>') {
+            //+ 缺少tag，向前推进3，解析器容忍这个错误， continue 继续解析
             emitError(context, ErrorCodes.MISSING_END_TAG_NAME, 2)
             advanceBy(context, 3)
             continue
           } else if (/[a-z]/i.test(s[2])) {
+            //+ 类似</div>，这这个判断不能存在这个，这个会在下面的if中进行判断
             emitError(context, ErrorCodes.X_INVALID_END_TAG)
             parseTag(context, TagType.End, parent)
             continue
@@ -176,6 +182,7 @@ function parseChildren(
             node = parseBogusComment(context)
           }
         } else if (/[a-z]/i.test(s[1])) {
+          //+ 正经DOM节点
           node = parseElement(context, ancestors)
         } else if (s[1] === '?') {
           emitError(
@@ -309,14 +316,17 @@ function parseComment(context: ParserContext): CommentNode {
   // Regular comment.
   const match = /--(\!)?>/.exec(context.source)
   if (!match) {
+    //+ 匹配不到，直接处理完source
     content = context.source.slice(4)
     advanceBy(context, context.source.length)
     emitError(context, ErrorCodes.EOF_IN_COMMENT)
   } else {
     if (match.index <= 3) {
+      //+ --匹配到的是开头的--，这种情况<!-->
       emitError(context, ErrorCodes.ABRUPT_CLOSING_OF_EMPTY_COMMENT)
     }
     if (match[1]) {
+      //+ 匹配【1】有值，说明尾部有!
       emitError(context, ErrorCodes.INCORRECTLY_CLOSED_COMMENT)
     }
     content = context.source.slice(4, match.index)
@@ -325,6 +335,7 @@ function parseComment(context: ParserContext): CommentNode {
     const s = context.source.slice(0, match.index)
     let prevIndex = 1,
       nestedIndex = 0
+    //+ 判断注释里面有没有嵌套注释
     while ((nestedIndex = s.indexOf('<!--', prevIndex)) !== -1) {
       advanceBy(context, nestedIndex - prevIndex + 1)
       if (nestedIndex + 4 < s.length) {
@@ -440,9 +451,11 @@ function parseTag(
 
   // Tag open.
   const start = getCursor(context)
+  //+ 拿到 tag，需要注意正则中 tag 开头只能是 [a-z]
   const match = /^<\/?([a-z][^\t\r\n\f />]*)/i.exec(context.source)!
   const tag = match[1]
   const ns = context.options.getNamespace(tag, parent)
+  //+ 往前推进 context，消耗标签、消耗空格
 
   advanceBy(context, match[0].length)
   advanceSpaces(context)
@@ -459,6 +472,9 @@ function parseTag(
     context.inPre = true
   }
 
+  //+ 如果以前不是 isInPre 但是解析出来的 props 有 v-pre 指令，
+  //+ 设置context.isInPre为 true，
+  //+ 恢复解析 props 之前的 source 和 位置，我们要重新解析 props，
   // check v-pre
   if (
     !context.inVPre &&
@@ -472,12 +488,14 @@ function parseTag(
     props = parseAttributes(context, type).filter(p => p.name !== 'v-pre')
   }
 
+  //+ 检查tag，关闭
   // Tag close.
   let isSelfClosing = false
   if (context.source.length === 0) {
     emitError(context, ErrorCodes.EOF_IN_TAG)
   } else {
     isSelfClosing = startsWith(context.source, '/>')
+    //+ 碰到的是结束标签，拿到的是自闭标签
     if (type === TagType.End && isSelfClosing) {
       emitError(context, ErrorCodes.END_TAG_WITH_TRAILING_SOLIDUS)
     }
@@ -490,7 +508,9 @@ function parseTag(
     const hasVIs = props.some(
       p => p.type === NodeTypes.DIRECTIVE && p.name === 'is'
     )
+    //+ 没有v-is
     if (options.isNativeTag && !hasVIs) {
+      //+ 如果不是平台原生 tag 且没有 is 指令的 COMPONENT
       if (!options.isNativeTag(tag)) tagType = ElementTypes.COMPONENT
     } else if (
       hasVIs ||
@@ -499,6 +519,7 @@ function parseTag(
       /^[A-Z]/.test(tag) ||
       tag === 'component'
     ) {
+      //+ 有 is 指令 、框架核心组件、平台内建组件、大写开头的标签、tag 是 component 的都认为是 COMPONENT
       tagType = ElementTypes.COMPONENT
     }
 
@@ -512,6 +533,7 @@ function parseTag(
         )
       })
     ) {
+      //+ 而对于 tag 为 template的，只有它有 if,else,else-if,for,slot 这些指令，我们在认为他是 ElementTypes.TEMPLATE。
       tagType = ElementTypes.TEMPLATE
     }
   }
@@ -745,6 +767,7 @@ function parseAttributeValue(context: ParserContext): AttributeValue {
   return { content, isQuoted, loc: getSelection(context, start) }
 }
 
+//+ 处理 '{{'的内容
 function parseInterpolation(
   context: ParserContext,
   mode: TextModes
@@ -752,6 +775,7 @@ function parseInterpolation(
   const [open, close] = context.options.delimiters
   __TEST__ && assert(startsWith(context.source, open))
 
+  //+ 找到}}的位置
   const closeIndex = context.source.indexOf(close, open.length)
   if (closeIndex === -1) {
     emitError(context, ErrorCodes.X_MISSING_INTERPOLATION_END)
@@ -759,13 +783,17 @@ function parseInterpolation(
   }
 
   const start = getCursor(context)
+  //+ content 推动字符
   advanceBy(context, open.length)
   const innerStart = getCursor(context)
   const innerEnd = getCursor(context)
   const rawContentLength = closeIndex - open.length
+  //+ 获取插值内容
   const rawContent = context.source.slice(0, rawContentLength)
   const preTrimContent = parseTextData(context, rawContentLength, mode)
+  //+ 插值内容去除空格
   const content = preTrimContent.trim()
+  //+ 前置空格长度
   const startOffset = preTrimContent.indexOf(content)
   if (startOffset > 0) {
     advancePositionWithMutation(innerStart, rawContent, startOffset)
@@ -773,6 +801,7 @@ function parseInterpolation(
   const endOffset =
     rawContentLength - (preTrimContent.length - content.length - startOffset)
   advancePositionWithMutation(innerEnd, rawContent, endOffset)
+  //+ 推动字符
   advanceBy(context, close.length)
 
   return {
@@ -792,6 +821,7 @@ function parseInterpolation(
 function parseText(context: ParserContext, mode: TextModes): TextNode {
   __TEST__ && assert(context.source.length > 0)
 
+  //+ 文案型，结束点可能是，<, {{,     ]]>
   const endTokens = ['<', context.options.delimiters[0]]
   if (mode === TextModes.CDATA) {
     endTokens.push(']]>')
@@ -808,6 +838,7 @@ function parseText(context: ParserContext, mode: TextModes): TextNode {
   __TEST__ && assert(endIndex > 0)
 
   const start = getCursor(context)
+  //
   const content = parseTextData(context, endIndex, mode)
 
   return {
@@ -826,7 +857,9 @@ function parseTextData(
   length: number,
   mode: TextModes
 ): string {
+  //+ 裁剪值
   const rawText = context.source.slice(0, length)
+  //+ 向前移动
   advanceBy(context, length)
   if (
     mode === TextModes.RAWTEXT ||
@@ -836,6 +869,7 @@ function parseTextData(
     return rawText
   } else {
     // DATA or RCDATA containing "&"". Entity decoding required.
+    //+ 处理 &符号的HTML转译
     return context.options.decodeEntities(
       rawText,
       mode === TextModes.ATTRIBUTE_VALUE
@@ -922,10 +956,12 @@ function isEnd(
   const s = context.source
 
   switch (mode) {
+    //+
     case TextModes.DATA:
       if (startsWith(s, '</')) {
         //TODO: probably bad performance
         for (let i = ancestors.length - 1; i >= 0; --i) {
+          // 判断结束标签
           if (startsWithEndTagOpen(s, ancestors[i].tag)) {
             return true
           }
@@ -948,6 +984,7 @@ function isEnd(
       }
       break
   }
+  //+ 都不符合的情况下判断是不是已经处理完了
 
   return !s
 }

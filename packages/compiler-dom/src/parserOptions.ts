@@ -27,6 +27,7 @@ export const parserOptions: ParserOptions = {
   isNativeTag: tag => isHTMLTag(tag) || isSVGTag(tag),
   isPreTag: tag => tag === 'pre',
   decodeEntities: __BROWSER__ ? decodeHtmlBrowser : decodeHtml,
+  //+ 是不是内部自带的标签
 
   isBuiltInComponent: (tag: string): symbol | undefined => {
     if (isBuiltInType(tag, `Transition`)) {

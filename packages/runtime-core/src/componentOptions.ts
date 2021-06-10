@@ -519,6 +519,7 @@ export function applyOptions(
   // applyOptions is called non-as-mixin once per instance
   if (!asMixin) {
     isInBeforeCreate = true
+    //+ beforeCreate钩子比setup中使用api的钩子要提早执行。
     callSyncHook(
       'beforeCreate',
       LifecycleHooks.BEFORE_CREATE,

@@ -341,12 +341,16 @@ function _createVNode(
   }
 
   // class component normalization.
+  //+ 类组件标准化
   if (isClassComponent(type)) {
     type = type.__vccOpts
   }
 
+  //+ 标准化 class & style
+  //+ 卸载组件上的porps
   // class & style normalization.
   if (props) {
+    //+ 对于反应性或代理对象，我们需要克隆它以支持突变。
     // for reactive or proxy objects, we need to clone it to enable mutation.
     if (isProxy(props) || InternalObjectKey in props) {
       props = extend({}, props)
@@ -358,6 +362,7 @@ function _createVNode(
     if (isObject(style)) {
       // reactive state objects need to be cloned since they are likely to be
       // mutated
+      //+ :style="styleObj"
       if (isProxy(style) && !isArray(style)) {
         style = extend({}, style)
       }
@@ -422,6 +427,8 @@ function _createVNode(
     warn(`VNode created with invalid key (NaN). VNode type:`, vnode.type)
   }
 
+  //+ 标准化子节点 ---> 确定children类型，
+  //+ 标准化children成数组形态、插槽形态或者string、null
   normalizeChildren(vnode, children)
 
   // normalize suspense children
@@ -488,6 +495,7 @@ export function cloneVNode<T, U>(
     // existing patch flag to be reliable and need to add the FULL_PROPS flag.
     // note: perserve flag for fragments since they use the flag for children
     // fast paths only.
+    //+ 重新设置patchFlag
     patchFlag:
       extraProps && vnode.type !== Fragment
         ? patchFlag === -1 // hoisted node
@@ -549,6 +557,7 @@ export function createCommentVNode(
 }
 
 export function normalizeVNode(child: VNodeChild): VNode {
+  console.log('----normalizeVNode，根据子节点类型序列化vnode----')
   if (child == null || typeof child === 'boolean') {
     // empty placeholder
     return createVNode(Comment)

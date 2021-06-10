@@ -21,7 +21,10 @@ export interface App<HostElement = any> {
   config: AppConfig
   use(plugin: Plugin, ...options: any[]): this
   mixin(mixin: ComponentOptions): this
+  //+ 组件相关函数重载
+  //+ 获取
   component(name: string): Component | undefined
+  //+ 注册
   component(name: string, component: Component): this
   directive(name: string): Directive | undefined
   directive(name: string, directive: Directive): this
@@ -100,9 +103,11 @@ export function createAppContext(): AppContext {
     config: {
       isNativeTag: NO,
       performance: false,
+      // 全局属性
       globalProperties: {},
       optionMergeStrategies: {},
       isCustomElement: NO,
+      // 错误处理函数
       errorHandler: undefined,
       warnHandler: undefined
     },
@@ -124,17 +129,20 @@ export function createAppAPI<HostElement>(
   render: RootRenderFunction,
   hydrate?: RootHydrateFunction
 ): CreateAppFunction<HostElement> {
+  // 通过柯里化的技巧将render函数以及hydrate参数持有，避免了用户在应用需要传入render函数给createApp
   return function createApp(rootComponent, rootProps = null) {
     if (rootProps != null && !isObject(rootProps)) {
       __DEV__ && warn(`root props passed to app.mount() must be an object.`)
       rootProps = null
     }
+    //+ 上下文
 
     const context = createAppContext()
     const installedPlugins = new Set()
 
     let isMounted = false
 
+    //+ 通过对象字面量创建app实例，实现了上文app实例的接口
     const app: App = (context.app = {
       _uid: uid++,
       _component: rootComponent as ConcreteComponent,
@@ -226,10 +234,12 @@ export function createAppAPI<HostElement>(
 
       mount(rootContainer: HostElement, isHydrate?: boolean): any {
         if (!isMounted) {
+          //+ 创建根组件的VNode
           const vnode = createVNode(
             rootComponent as ConcreteComponent,
             rootProps
           )
+          //+ 绑定上下文
           // store app context on the root VNode.
           // this will be set on the root instance on initial mount.
           vnode.appContext = context
@@ -247,6 +257,7 @@ export function createAppAPI<HostElement>(
             render(vnode, rootContainer)
           }
           isMounted = true
+          //+ 绑定根实例和根容器
           app._container = rootContainer
           // for devtools and telemetry
           ;(rootContainer as any).__vue_app__ = app

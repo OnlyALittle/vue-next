@@ -101,6 +101,7 @@ export function advancePositionWithClone(
 
 // advance by mutation without cloning (for performance reasons), since this
 // gets called a lot in the parser
+//+ 通过突变而不克隆（出于性能原因），因为这在解析器中称为很多
 export function advancePositionWithMutation(
   pos: Position,
   source: string,

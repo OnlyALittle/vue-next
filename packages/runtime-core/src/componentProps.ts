@@ -126,6 +126,13 @@ type NormalizedProp =
 export type NormalizedProps = Record<string, NormalizedProp>
 export type NormalizedPropsOptions = [NormalizedProps, string[]] | []
 
+//+ 创建了一个props和attrs的数组:
+//+ attrs和props的本质区别是，如果instance.type.props存在，
+//+ 当遍历vnode.props的时候，赋值給props得方式为键key存在于instance.type.props中的，
+//+ 如果键key不存在于instance.type.props 且instance.type.emit没有用到该键key，
+//+ 则赋值給attrs。needCastKeys是用来給props设置一下默认字段和布尔字段的，使其标准化一些。
+//！ 一句话，attrs是被instance.type.props所过滤的vnode.props。
+
 export function initProps(
   instance: ComponentInternalInstance,
   rawProps: Data | null,
@@ -141,8 +148,11 @@ export function initProps(
     validateProps(props, instance)
   }
 
+  //+ result of bitwise flag comparison
+  //+ ShapeFlags.STATEFUL_COMPONENT
   if (isStateful) {
     // stateful
+    //+ 所以props一层响应
     instance.props = isSSR ? props : shallowReactive(props)
   } else {
     if (!instance.type.props) {
@@ -265,12 +275,14 @@ export function updateProps(
   }
 }
 
+//+ 处理props啦
 function setFullProps(
   instance: ComponentInternalInstance,
   rawProps: Data | null,
   props: Data,
   attrs: Data
 ) {
+  //+ [normalized, needCastKeys])
   const [options, needCastKeys] = instance.propsOptions
   if (rawProps) {
     for (const key in rawProps) {
@@ -285,6 +297,8 @@ function setFullProps(
       if (options && hasOwn(options, (camelKey = camelize(key)))) {
         props[camelKey] = value
       } else if (!isEmitListener(instance.emitsOptions, key)) {
+        //+ 任何未声明的道具(无论是作为道具还是发出的事件)都会被放入一个单独的' attrs '对象中进行传播。
+        //+ 确保保留原来的关键外壳
         // Any non-declared (either as a prop or an emitted event) props are put
         // into a separate `attrs` object for spreading. Make sure to preserve
         // original key casing
@@ -293,10 +307,13 @@ function setFullProps(
     }
   }
 
+  //+ 近似看成需要赋值的key
   if (needCastKeys) {
+    //+ 避免有引用属性的响应式的干扰
     const rawCurrentProps = toRaw(props)
     for (let i = 0; i < needCastKeys.length; i++) {
       const key = needCastKeys[i]
+      //+ 放入值
       props[key] = resolvePropValue(
         options!,
         rawCurrentProps,
@@ -323,6 +340,8 @@ function resolvePropValue(
       const defaultValue = opt.default
       if (opt.type !== Function && isFunction(defaultValue)) {
         setCurrentInstance(instance)
+        //+ 执行得到默认值
+        //+ () => {}
         value = defaultValue(props)
         setCurrentInstance(null)
       } else {
@@ -354,7 +373,12 @@ export function normalizePropsOptions(
   }
 
   const raw = comp.props
+  //+ test: {
+  //+   type: Number,
+  //+   default: 0
+  //+ }
   const normalized: NormalizedPropsOptions[0] = {}
+  //+ ['a-b', 'c-d']
   const needCastKeys: NormalizedPropsOptions[1] = []
 
   // apply mixin/extends props
@@ -366,6 +390,7 @@ export function normalizePropsOptions(
       extend(normalized, props)
       if (keys) needCastKeys.push(...keys)
     }
+    // mixins
     if (!asMixin && appContext.mixins.length) {
       appContext.mixins.forEach(extendProps)
     }
@@ -395,10 +420,14 @@ export function normalizePropsOptions(
     if (__DEV__ && !isObject(raw)) {
       warn(`invalid props options`, raw)
     }
+    //+ 检测到是对象，遍历props，把遍历键key转换为驼峰式写法， 检测到当遍历键key，
+    //+ 遍历值value为Boolean类型，needCastKeys.push(key)，检测到拥有default字段，
+    //+ needCastKeys.push(key)。
     for (const key in raw) {
       const normalizedKey = camelize(key)
       if (validatePropName(normalizedKey)) {
         const opt = raw[key]
+        //+ 把 foo: Boolean 格式化成完整obj的形式
         const prop: NormalizedProp = (normalized[normalizedKey] =
           isArray(opt) || isFunction(opt) ? { type: opt } : opt)
         if (prop) {

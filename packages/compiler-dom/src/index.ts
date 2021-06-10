@@ -58,6 +58,7 @@ export function compile(
         options.directiveTransforms || {}
       ),
       transformHoist: __BROWSER__ ? null : stringifyStatic
+      //+ 对hoist的处理方式，浏览器上就保持hoist状态，其他node则变为字符串
     })
   )
 }

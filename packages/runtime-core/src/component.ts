@@ -402,6 +402,7 @@ const emptyAppContext = createAppContext()
 
 let uid = 0
 
+//+ 生成一个instance对象，记录当前组件信息
 export function createComponentInstance(
   vnode: VNode,
   parent: ComponentInternalInstance | null,
@@ -518,6 +519,7 @@ export function validateComponentName(name: string, config: AppConfig) {
 
 export let isInSSRComponentSetup = false
 
+//+ 启动组件
 export function setupComponent(
   instance: ComponentInternalInstance,
   isSSR = false
@@ -526,6 +528,7 @@ export function setupComponent(
 
   const { props, children, shapeFlag } = instance.vnode
   const isStateful = shapeFlag & ShapeFlags.STATEFUL_COMPONENT
+  //+ 创建了一个props和attrs的数组:
   initProps(instance, props, isStateful, isSSR)
   initSlots(instance, children)
 
@@ -560,9 +563,11 @@ function setupStatefulComponent(
     }
   }
   // 0. create render proxy property access cache
+  //+ 属性访问缓存
   instance.accessCache = Object.create(null)
   // 1. create public instance / render proxy
   // also mark it raw so it's never observed
+  //+ 创建公共实例/渲染代理也将其标记为raw，这样它就不会被观察到
   instance.proxy = new Proxy(instance.ctx, PublicInstanceProxyHandlers)
   if (__DEV__) {
     exposePropsOnRenderContext(instance)
@@ -573,7 +578,12 @@ function setupStatefulComponent(
     const setupContext = (instance.setupContext =
       setup.length > 1 ? createSetupContext(instance) : null)
 
+    //+  使用钩子api的时候会使用到。
     currentInstance = instance
+    //+ 暂停track，reactive相关，
+    //+ 这里停止track是避免执行setup方法的时候，有响应式数据追踪到其他地方的effect，
+    //+ 比如具有父组件进行componentEffect的过程中会patch子组件，子组件更新，父组件也需要更新，
+    //+ 这一步仅仅在componentEffect中处理。
     pauseTracking()
     const setupResult = callWithErrorHandling(
       setup,
@@ -613,6 +623,7 @@ export function handleSetupResult(
   setupResult: unknown,
   isSSR: boolean
 ) {
+  //+ return 方法，reutrn 一个render嘛，此时用到的数据响应式已经嵌在render中了
   if (isFunction(setupResult)) {
     // setup returned an inline render function
     if (__NODE_JS__ && (instance.type as ComponentOptions).__ssrInlineRender) {
@@ -634,6 +645,7 @@ export function handleSetupResult(
     if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
       instance.devtoolsRawSetupState = setupResult
     }
+    // 响应式化
     instance.setupState = proxyRefs(setupResult)
     if (__DEV__) {
       exposeSetupStateOnRenderContext(instance)
@@ -663,6 +675,8 @@ export function registerRuntimeCompiler(_compile: any) {
   compile = _compile
 }
 
+//+ 标准化模板或者 render 函数
+//+ 兼容options API
 function finishComponentSetup(
   instance: ComponentInternalInstance,
   isSSR: boolean

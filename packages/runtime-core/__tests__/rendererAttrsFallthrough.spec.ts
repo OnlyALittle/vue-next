@@ -28,6 +28,7 @@ describe('attribute fallthrough', () => {
           count.value++
           click()
         }
+        //+ 这里的任何东西 都不会被本身effect收集 只有return 后的方法 才会
 
         return () =>
           h(Child, {

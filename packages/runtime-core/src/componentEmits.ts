@@ -81,6 +81,7 @@ export function emit(
   const isModelListener = event.startsWith('update:')
 
   // for v-model update:xxx events, apply modifiers on args
+  //+ 对于v-model update:xxx事件，在arg上应用修改器
   const modelArg = isModelListener && event.slice(7)
   if (modelArg && modelArg in props) {
     const modifiersKey = `${

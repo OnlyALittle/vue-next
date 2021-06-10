@@ -99,13 +99,14 @@ function createGetter(isReadonly = false, shallow = false) {
 
     //+ 属于数组的api
     if (!isReadonly && targetIsArray && hasOwn(arrayInstrumentations, key)) {
+      //+ 拦截 ['includes', 'indexOf', 'lastIndexOf'] 方法 每一个遍历的 返回一个methods
       return Reflect.get(arrayInstrumentations, key, receiver)
     }
 
     //+ 取值
     const res = Reflect.get(target, key, receiver)
 
-    //+ 过滤无需track的key
+    //+ 过滤无需track的key，直接返回
     if (
       isSymbol(key)
         ? builtInSymbols.has(key as symbol)
@@ -174,7 +175,7 @@ function createSetter(shallow = false) {
         : hasOwn(target, key)
     const result = Reflect.set(target, key, value, receiver)
     // don't trigger if target is something up in the prototype chain of original
-    //+ 如果是修改原值则不触发，tirrger
+    //+ 如果是修改原值不是原值的话，就不触发，tirrger，具体场景见
     if (target === toRaw(receiver)) {
       if (!hadKey) {
         trigger(target, TriggerOpTypes.ADD, key, value)
