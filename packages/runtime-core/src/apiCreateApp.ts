@@ -2,19 +2,27 @@ import {
   ConcreteComponent,
   Data,
   validateComponentName,
-  Component
+  Component,
+  ComponentInternalInstance
 } from './component'
-import { ComponentOptions } from './componentOptions'
+import {
+  ComponentOptions,
+  MergedComponentOptions,
+  RuntimeCompilerOptions
+} from './componentOptions'
 import { ComponentPublicInstance } from './componentPublicInstance'
 import { Directive, validateDirectiveName } from './directives'
 import { RootRenderFunction } from './renderer'
 import { InjectionKey } from './apiInject'
-import { isFunction, NO, isObject } from '@vue/shared'
 import { warn } from './warning'
 import { createVNode, cloneVNode, VNode } from './vnode'
 import { RootHydrateFunction } from './hydration'
 import { devtoolsInitApp, devtoolsUnmountApp } from './devtools'
+import { isFunction, NO, isObject } from '@vue/shared'
 import { version } from '.'
+import { installAppCompatProperties } from './compat/global'
+import { NormalizedPropsOptions } from './componentProps'
+import { ObjectEmitsOptions } from './componentEmits'
 
 export interface App<HostElement = any> {
   version: string
@@ -30,9 +38,10 @@ export interface App<HostElement = any> {
   directive(name: string, directive: Directive): this
   mount(
     rootContainer: HostElement | string,
-    isHydrate?: boolean
+    isHydrate?: boolean,
+    isSVG?: boolean
   ): ComponentPublicInstance
-  unmount(rootContainer: HostElement | string): void
+  unmount(): void
   provide<T>(key: InjectionKey<T> | string, value: T): this
 
   // internal, but we need to expose these for the server-renderer and devtools
@@ -41,14 +50,21 @@ export interface App<HostElement = any> {
   _props: Data | null
   _container: HostElement | null
   _context: AppContext
+  _instance: ComponentInternalInstance | null
+
+  /**
+   * v2 compat only
+   */
+  filter?(name: string): Function | undefined
+  filter?(name: string, filter: Function): this
+
+  /**
+   * @internal v3 compat only
+   */
+  _createRoot?(options: ComponentOptions): ComponentPublicInstance
 }
 
-export type OptionMergeFunction = (
-  to: unknown,
-  from: unknown,
-  instance: any,
-  key: string
-) => any
+export type OptionMergeFunction = (to: unknown, from: unknown) => any
 
 export interface AppConfig {
   // @private
@@ -57,7 +73,6 @@ export interface AppConfig {
   performance: boolean
   optionMergeStrategies: Record<string, OptionMergeFunction>
   globalProperties: Record<string, any>
-  isCustomElement: (tag: string) => boolean
   errorHandler?: (
     err: unknown,
     instance: ComponentPublicInstance | null,
@@ -68,6 +83,17 @@ export interface AppConfig {
     instance: ComponentPublicInstance | null,
     trace: string
   ) => void
+
+  /**
+   * @deprecated use config.compilerOptions.isCustomElement
+   */
+  isCustomElement?: (tag: string) => boolean
+
+  /**
+   * Options to pass to @vue/compiler-dom.
+   * Only supported in runtime compiler build.
+   */
+  compilerOptions: RuntimeCompilerOptions
 }
 
 export interface AppContext {
@@ -77,16 +103,34 @@ export interface AppContext {
   components: Record<string, Component>
   directives: Record<string, Directive>
   provides: Record<string | symbol, any>
+
   /**
-   * Flag for de-optimizing props normalization
+   * Cache for merged/normalized component options
+   * Each app instance has its own cache because app-level global mixins and
+   * optionMergeStrategies can affect merge behavior.
    * @internal
    */
-  deopt?: boolean
+  optionsCache: WeakMap<ComponentOptions, MergedComponentOptions>
+  /**
+   * Cache for normalized props options
+   * @internal
+   */
+  propsCache: WeakMap<ConcreteComponent, NormalizedPropsOptions>
+  /**
+   * Cache for normalized emits options
+   * @internal
+   */
+  emitsCache: WeakMap<ConcreteComponent, ObjectEmitsOptions | null>
   /**
    * HMR only
    * @internal
    */
   reload?: () => void
+  /**
+   * v2 compat only
+   * @internal
+   */
+  filters?: Record<string, Function>
 }
 
 type PluginInstallFunction = (app: App, ...options: any[]) => any
@@ -106,15 +150,17 @@ export function createAppContext(): AppContext {
       // 全局属性
       globalProperties: {},
       optionMergeStrategies: {},
-      isCustomElement: NO,
-      // 错误处理函数
       errorHandler: undefined,
-      warnHandler: undefined
+      warnHandler: undefined,
+      compilerOptions: {}
     },
     mixins: [],
     components: {},
     directives: {},
-    provides: Object.create(null)
+    provides: Object.create(null),
+    optionsCache: new WeakMap(),
+    propsCache: new WeakMap(),
+    emitsCache: new WeakMap()
   }
 }
 
@@ -149,6 +195,7 @@ export function createAppAPI<HostElement>(
       _props: rootProps,
       _container: null,
       _context: context,
+      _instance: null,
 
       version,
 
@@ -186,11 +233,6 @@ export function createAppAPI<HostElement>(
         if (__FEATURE_OPTIONS_API__) {
           if (!context.mixins.includes(mixin)) {
             context.mixins.push(mixin)
-            // global mixin with props/emits de-optimizes props/emits
-            // normalization caching.
-            if (mixin.props || mixin.emits) {
-              context.deopt = true
-            }
           } else if (__DEV__) {
             warn(
               'Mixin has already been applied to target app' +
@@ -232,7 +274,11 @@ export function createAppAPI<HostElement>(
         return app
       },
 
-      mount(rootContainer: HostElement, isHydrate?: boolean): any {
+      mount(
+        rootContainer: HostElement,
+        isHydrate?: boolean,
+        isSVG?: boolean
+      ): any {
         if (!isMounted) {
           //+ 创建根组件的VNode
           const vnode = createVNode(
@@ -247,14 +293,14 @@ export function createAppAPI<HostElement>(
           // HMR root reload
           if (__DEV__) {
             context.reload = () => {
-              render(cloneVNode(vnode), rootContainer)
+              render(cloneVNode(vnode), rootContainer, isSVG)
             }
           }
 
           if (isHydrate && hydrate) {
             hydrate(vnode as VNode<Node, Element>, rootContainer as any)
           } else {
-            render(vnode, rootContainer)
+            render(vnode, rootContainer, isSVG)
           }
           isMounted = true
           //+ 绑定根实例和根容器
@@ -263,6 +309,7 @@ export function createAppAPI<HostElement>(
           ;(rootContainer as any).__vue_app__ = app
 
           if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
+            app._instance = vnode.component
             devtoolsInitApp(app, version)
           }
 
@@ -281,8 +328,10 @@ export function createAppAPI<HostElement>(
         if (isMounted) {
           render(null, app._container)
           if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
+            app._instance = null
             devtoolsUnmountApp(app)
           }
+          delete app._container.__vue_app__
         } else if (__DEV__) {
           warn(`Cannot unmount an app that is not mounted.`)
         }
@@ -302,6 +351,10 @@ export function createAppAPI<HostElement>(
         return app
       }
     })
+
+    if (__COMPAT__) {
+      installAppCompatProperties(app, context, render)
+    }
 
     return app
   }

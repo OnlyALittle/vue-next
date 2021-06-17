@@ -4,7 +4,7 @@ import { isArray, isObject, hasChanged } from '@vue/shared'
 import { reactive, isProxy, toRaw, isReactive } from './reactive'
 import { CollectionTypes } from './collectionHandlers'
 
-declare const RefSymbol: unique symbol
+export declare const RefSymbol: unique symbol
 
 export interface Ref<T = any> {
   value: T
@@ -20,7 +20,7 @@ export interface Ref<T = any> {
   _shallow?: boolean
 }
 
-export type ToRef<T> = T extends Ref ? T : Ref<UnwrapRef<T>>
+export type ToRef<T> = [T] extends [Ref] ? T : Ref<UnwrapRef<T>>
 export type ToRefs<T = any> = {
   // #2687: somehow using ToRef<T[K]> here turns the resulting type into
   // a union of multiple Ref<*> types instead of a single Ref<* | *> type.
@@ -56,9 +56,9 @@ class RefImpl<T> {
 
   public readonly __v_isRef = true
 
-  constructor(private _rawValue: T, public readonly _shallow = false) {
-    //+ 把对象直接处理成reactive
-    //+ _shallow模式下，传入的一定是obj，但是refImpl只会监听对象的value，所以其他值不会响应式
+  //+ 把对象直接处理成reactive
+  //+ _shallow模式下，传入的一定是obj，但是refImpl只会监听对象的value，所以其他值不会响应式
+  constructor(private _rawValue: T, public readonly _shallow: boolean) {
     this._value = _shallow ? _rawValue : convert(_rawValue)
   }
 

@@ -1,27 +1,17 @@
 import { ErrorCodes, callWithErrorHandling } from './errorHandling'
 import { isArray } from '@vue/shared'
 import { ComponentPublicInstance } from './componentPublicInstance'
+import { ComponentInternalInstance, getComponentName } from './component'
+import { warn } from './warning'
+import { ReactiveEffect } from '@vue/reactivity'
 
-export interface SchedulerJob {
-  (): void
+export interface SchedulerJob extends Function, Partial<ReactiveEffect> {
   /**
-   * unique job id, only present on raw effects, e.g. component render effect
+   * Attached by renderer.ts when setting up a component's render effect
+   * Used to obtain component information when reporting max recursive updates.
+   * dev only.
    */
-  id?: number
-  /**
-   * Indicates whether the job is allowed to recursively trigger itself.
-   * By default, a job cannot trigger itself because some built-in method calls,
-   * e.g. Array.prototype.push actually performs reads as well (#1740) which
-   * can lead to confusing infinite loops.
-   * The allowed cases are component update functions and watch callbacks.
-   * Component update functions may update child component props, which in turn
-   * trigger flush: "pre" watch callbacks that mutates state that the parent
-   * relies on (#1801). Watch callbacks doesn't track its dependencies so if it
-   * triggers itself again, it's likely intentional and it is the user's
-   * responsibility to perform recursive state mutation that eventually
-   * stabilizes (#1727).
-   */
-  allowRecurse?: boolean
+  ownerInstance?: ComponentInternalInstance
 }
 
 export type SchedulerCb = Function & { id?: number }
@@ -70,6 +60,25 @@ export function nextTick(
 //+ 比如一个由父到子的递归更新，函数调用栈会长时间占用主线程，导致线程阻塞无法执行其他更重要的任务。
 //+ 因此vue将更新时产生的任务缓存到任务队列，在微任务中批量执行。
 //+ 队列queue中没有任务A，则queue.push
+// #2768
+// Use binary-search to find a suitable position in the queue,
+// so that the queue maintains the increasing order of job's id,
+// which can prevent the job from being skipped and also can avoid repeated patching.
+function findInsertionIndex(job: SchedulerJob) {
+  // the start index should be `flushIndex + 1`
+  let start = flushIndex + 1
+  let end = queue.length
+  const jobId = getId(job)
+
+  while (start < end) {
+    const middle = (start + end) >>> 1
+    const middleJobId = getId(queue[middle])
+    middleJobId < jobId ? (start = middle + 1) : (end = middle)
+  }
+
+  return start
+}
+
 export function queueJob(job: SchedulerJob) {
   // the dedupe search uses the startIndex argument of Array.includes()
   // by default the search index includes the current job that is being run
@@ -90,7 +99,12 @@ export function queueJob(job: SchedulerJob) {
       )) &&
     job !== currentPreFlushParentJob
   ) {
-    queue.push(job)
+    const pos = findInsertionIndex(job)
+    if (pos > -1) {
+      queue.splice(pos, 0, job)
+    } else {
+      queue.push(job)
+    }
     queueFlush()
     //+ 标记队列准备执行，把flushJobs丢进微任务中。
   }
@@ -111,7 +125,7 @@ function queueFlush() {
 
 export function invalidateJob(job: SchedulerJob) {
   const i = queue.indexOf(job)
-  if (i > -1) {
+  if (i > flushIndex) {
     queue.splice(i, 1)
   }
 }
@@ -167,8 +181,11 @@ export function flushPreFlushCbs(
       preFlushIndex < activePreFlushCbs.length;
       preFlushIndex++
     ) {
-      if (__DEV__) {
+      if (
+        __DEV__ &&
         checkRecursiveUpdates(seen!, activePreFlushCbs[preFlushIndex])
+      ) {
+        continue
       }
       activePreFlushCbs[preFlushIndex]()
     }
@@ -203,8 +220,11 @@ export function flushPostFlushCbs(seen?: CountMap) {
       postFlushIndex < activePostFlushCbs.length;
       postFlushIndex++
     ) {
-      if (__DEV__) {
+      if (
+        __DEV__ &&
         checkRecursiveUpdates(seen!, activePostFlushCbs[postFlushIndex])
+      ) {
+        continue
       }
       activePostFlushCbs[postFlushIndex]()
     }
@@ -250,9 +270,9 @@ function flushJobs(seen?: CountMap) {
   try {
     for (flushIndex = 0; flushIndex < queue.length; flushIndex++) {
       const job = queue[flushIndex]
-      if (job) {
-        if (__DEV__) {
-          checkRecursiveUpdates(seen!, job)
+      if (job && job.active !== false) {
+        if (__DEV__ && checkRecursiveUpdates(seen!, job)) {
+          continue
         }
         callWithErrorHandling(job, null, ErrorCodes.SCHEDULER)
       }
@@ -271,8 +291,12 @@ function flushJobs(seen?: CountMap) {
     // keep flushing until it drains.
     //+ 由于清队期间（isFlushing）也有可能会有任务入队，因此会导致按照实微任务开始执行时
     //+ 的队长度遍历清队，可能会导致无法彻底清干净。因此需要递归的清空队伍，保证一次清队微任务中所有任务队列都被全部清空
-    if (queue.length || pendingPostFlushCbs.length) {
-      //+ 循环调用直达执行完毕
+    //+ 循环调用直达执行完毕
+    if (
+      queue.length ||
+      pendingPreFlushCbs.length ||
+      pendingPostFlushCbs.length
+    ) {
       flushJobs(seen)
     }
   }
@@ -284,13 +308,18 @@ function checkRecursiveUpdates(seen: CountMap, fn: SchedulerJob | SchedulerCb) {
   } else {
     const count = seen.get(fn)!
     if (count > RECURSION_LIMIT) {
-      throw new Error(
-        `Maximum recursive updates exceeded. ` +
+      const instance = (fn as SchedulerJob).ownerInstance
+      const componentName = instance && getComponentName(instance.type)
+      warn(
+        `Maximum recursive updates exceeded${
+          componentName ? ` in component <${componentName}>` : ``
+        }. ` +
           `This means you have a reactive effect that is mutating its own ` +
           `dependencies and thus recursively triggering itself. Possible sources ` +
           `include component template, render function, updated hook or ` +
           `watcher source function.`
       )
+      return true
     } else {
       seen.set(fn, count + 1)
     }

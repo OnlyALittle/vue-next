@@ -12,7 +12,8 @@ import {
 import {
   mutableCollectionHandlers,
   readonlyCollectionHandlers,
-  shallowCollectionHandlers
+  shallowCollectionHandlers,
+  shallowReadonlyCollectionHandlers
 } from './collectionHandlers'
 import { UnwrapRef, Ref } from './ref'
 
@@ -35,7 +36,9 @@ export interface Target {
 }
 
 export const reactiveMap = new WeakMap<Target, any>()
+export const shallowReactiveMap = new WeakMap<Target, any>()
 export const readonlyMap = new WeakMap<Target, any>()
+export const shallowReadonlyMap = new WeakMap<Target, any>()
 
 const enum TargetType {
   INVALID = 0,
@@ -67,7 +70,7 @@ function getTargetType(value: Target) {
 }
 
 // only unwrap nested ref
-type UnwrapNestedRefs<T> = T extends Ref ? T : UnwrapRef<T>
+export type UnwrapNestedRefs<T> = T extends Ref ? T : UnwrapRef<T>
 
 /**
  * Creates a reactive copy of the original object.
@@ -101,7 +104,8 @@ export function reactive(target: object) {
     target,
     false,
     mutableHandlers,
-    mutableCollectionHandlers
+    mutableCollectionHandlers,
+    reactiveMap
   )
 }
 
@@ -115,7 +119,8 @@ export function shallowReactive<T extends object>(target: T): T {
     target,
     false,
     shallowReactiveHandlers,
-    shallowCollectionHandlers
+    shallowCollectionHandlers,
+    shallowReactiveMap
   )
 }
 
@@ -152,7 +157,8 @@ export function readonly<T extends object>(
     target,
     true,
     readonlyHandlers,
-    readonlyCollectionHandlers
+    readonlyCollectionHandlers,
+    readonlyMap
   )
 }
 
@@ -169,7 +175,8 @@ export function shallowReadonly<T extends object>(
     target,
     true,
     shallowReadonlyHandlers,
-    readonlyCollectionHandlers
+    shallowReadonlyCollectionHandlers,
+    shallowReadonlyMap
   )
 }
 
@@ -178,7 +185,8 @@ function createReactiveObject(
   target: Target,
   isReadonly: boolean,
   baseHandlers: ProxyHandler<any>,
-  collectionHandlers: ProxyHandler<any>
+  collectionHandlers: ProxyHandler<any>,
+  proxyMap: WeakMap<Target, any>
 ) {
   if (!isObject(target)) {
     if (__DEV__) {
@@ -196,7 +204,6 @@ function createReactiveObject(
     return target
   }
   // target already has corresponding Proxy
-  const proxyMap = isReadonly ? readonlyMap : reactiveMap
   const existingProxy = proxyMap.get(target)
   if (existingProxy) {
     return existingProxy

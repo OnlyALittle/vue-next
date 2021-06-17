@@ -5,7 +5,9 @@ import {
   ReactiveFlags,
   Target,
   readonlyMap,
-  reactiveMap
+  reactiveMap,
+  shallowReactiveMap,
+  shallowReadonlyMap
 } from './reactive'
 import { TrackOpTypes, TriggerOpTypes } from './operations'
 import {
@@ -22,9 +24,12 @@ import {
   hasChanged,
   isArray,
   isIntegerKey,
-  extend
+  extend,
+  makeMap
 } from '@vue/shared'
 import { isRef } from './ref'
+
+const isNonTrackableKeys = /*#__PURE__*/ makeMap(`__proto__,__v_isRef,__isVue`)
 
 const builtInSymbols = new Set(
   Object.getOwnPropertyNames(Symbol)
@@ -89,7 +94,15 @@ function createGetter(isReadonly = false, shallow = false) {
       return isReadonly
     } else if (
       key === ReactiveFlags.RAW &&
-      receiver === (isReadonly ? readonlyMap : reactiveMap).get(target)
+      receiver ===
+        (isReadonly
+          ? shallow
+            ? shallowReadonlyMap
+            : readonlyMap
+          : shallow
+            ? shallowReactiveMap
+            : reactiveMap
+        ).get(target)
     ) {
       //+ 读取reactive的源值，如果已经创建了则返回
       return target
@@ -105,13 +118,8 @@ function createGetter(isReadonly = false, shallow = false) {
 
     //+ 取值
     const res = Reflect.get(target, key, receiver)
-
     //+ 过滤无需track的key，直接返回
-    if (
-      isSymbol(key)
-        ? builtInSymbols.has(key as symbol)
-        : key === `__proto__` || key === `__v_isRef`
-    ) {
+    if (isSymbol(key) ? builtInSymbols.has(key) : isNonTrackableKeys(key)) {
       return res
     }
 
@@ -156,11 +164,12 @@ function createSetter(shallow = false) {
     value: unknown,
     receiver: object
   ): boolean {
-    const oldValue = (target as any)[key]
+    let oldValue = (target as any)[key]
     if (!shallow) {
       //+ 深度代理情况下，我们需要手动处理属性值为ref的情况，将trigger交给ref来触发
       //+ 赋值给ref的value
       value = toRaw(value)
+      oldValue = toRaw(oldValue)
       if (!isArray(target) && isRef(oldValue) && !isRef(value)) {
         oldValue.value = value
         return true
@@ -209,7 +218,7 @@ function has(target: object, key: string | symbol): boolean {
   return result
 }
 
-function ownKeys(target: object): (string | number | symbol)[] {
+function ownKeys(target: object): (string | symbol)[] {
   track(target, TrackOpTypes.ITERATE, isArray(target) ? 'length' : ITERATE_KEY)
   return Reflect.ownKeys(target)
 }
